@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
+import type { NextResponse } from "next/server";
+import { fail } from "@/lib/api";
 import type { Role } from "@/models/User";
 
 export const SESSION_COOKIE = "rs_session";
@@ -61,6 +63,25 @@ export function sessionCookieOptions() {
     path: "/",
     maxAge: SESSION_MAX_AGE,
   };
+}
+
+export async function requireUser(): Promise<
+  { session: Session } | { response: NextResponse }
+> {
+  const session = await getSession();
+  if (!session) return { response: fail("You must be signed in", 401) };
+  return { session };
+}
+
+export async function requireAdmin(): Promise<
+  { session: Session } | { response: NextResponse }
+> {
+  const session = await getSession();
+  if (!session) return { response: fail("You must be signed in", 401) };
+  if (session.role !== "admin") {
+    return { response: fail("Admin access required", 403) };
+  }
+  return { session };
 }
 
 export function toPublicUser(user: {
