@@ -4,7 +4,8 @@ import { connectDB } from "@/lib/db";
 import { Reservation } from "@/models/Reservation";
 import { getReservations } from "@/lib/queries";
 import { paginationFrom } from "@/lib/api";
-import { SLOT_CAPACITY, isBookableSlot } from "@/lib/constants";
+import { isBookableSlot } from "@/lib/constants";
+import { claimSlot, releaseSlot } from "@/lib/slot-capacity";
 import { reservationCreateSchema } from "@/lib/schemas";
 
 export async function GET(request: Request) {
@@ -50,20 +51,21 @@ export async function POST(request: Request) {
     ) {
       return fail("You already have a booking for that date and time", 409);
     }
-    const booked = await Reservation.countDocuments({
-      date: body.date,
-      time: body.time,
-      status: "confirmed",
-    });
-    if (booked >= SLOT_CAPACITY) {
+    if (!(await claimSlot(body.date, body.time))) {
       return fail("This time slot is fully booked", 409);
     }
 
-    const reservation = await Reservation.create({
-      ...body,
-      user: guard.session.userId,
-      status: "confirmed",
-    });
+    let reservation;
+    try {
+      reservation = await Reservation.create({
+        ...body,
+        user: guard.session.userId,
+        status: "confirmed",
+      });
+    } catch (error) {
+      await releaseSlot(body.date, body.time);
+      throw error;
+    }
     return ok(
       {
         reservation: {

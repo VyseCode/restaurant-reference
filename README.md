@@ -9,7 +9,7 @@ Reference implementation inspired by restaurant ordering platforms (Zomato/Swigg
 - Email/password auth with bcrypt hashing, signed JWTs in HTTP-only cookies, and `customer` / `admin` roles
 - Menu categories and items with price, image, dietary tags, availability and popularity counters
 - Daily specials with a unique per-date/per-item rule
-- Table reservations with time slots, capacity limit, no double-booking, past-slot guards, cancellations and admin management
+- Table reservations with time slots, atomic per-slot capacity claims, no double-booking, past-slot guards, cancellations, admin management and configurable capacity
 - Cart with quantity controls, unavailable-item guard, and checkout into `dine-in`, `takeaway` or `delivery` orders
 - Order workflow `placed → preparing → ready → completed`, payment status, cancellation, and admin-only transitions
 - Reviews allowed only for completed orders, one per order; favorites for customers
@@ -72,6 +72,7 @@ npm run start -- -p 3207
 | DELETE | `/api/reviews/[id]` | Remove own review | owner or admin |
 | GET / POST | `/api/favorites` | Favorite items / toggle | signed in |
 | GET | `/api/admin/stats` | Orders, revenue, bookings, popular items | admin |
+| GET / PATCH | `/api/admin/reservations/capacity` | Per-slot capacity and booked counts / set capacity | admin |
 
 ## Pages
 
@@ -82,13 +83,14 @@ npm run start -- -p 3207
 - Cached Mongoose connection with bounded pool; `.lean()` projections on list queries
 - Cursor-free but capped page/limit pagination (`limit ≤ 48`) with indexes on sort/filter keys
 - Unique compound indexes enforce one confirmed booking per user/date/slot, one favorite per user/item, one special per date/item, one review per order
+- Slot capacity is a per-slot document claimed with a conditional `$inc`, so concurrent requests for the last seat yield exactly one confirmation; cancels, deletes and status changes release seats, and a failed create compensates by releasing its claim
 - Denormalized popularity counters use atomic `$inc`; schema `min` guards against negative values
 - Every mutation is zod-validated and authz-checked server-side; passwords use `select: false` and are never serialized
 - Customer/admin separation is enforced in route handlers and the admin layout, not just in the UI
 
 ## Known limitations
 
-- Slot-capacity checks are count-then-create rather than a MongoDB transaction; on a replica set this could be made fully race-safe with a transaction or a capacity document using `$inc` with a condition.
+- Seat claims and reservation writes are two operations with compensating rollback rather than one multi-document transaction; a replica set could wrap them in a transaction. Existing databases should be re-seeded to backfill capacity documents.
 - No real payment gateway: `paymentStatus` is set by staff from the admin panel.
 - Images are CSS placeholders; the seeded menu uses empty `imageUrl` values (the field is supported in the API).
 - No email verification, password reset, rate limiting, or CSRF tokens (same-site lax cookies are used).

@@ -1,6 +1,9 @@
 import { connectDB } from "@/lib/db";
 import { getReservations } from "@/lib/queries";
+import { getSlotCapacities } from "@/lib/slot-capacity";
+import { addDays } from "@/lib/constants";
 import { ActionButton } from "@/components/ActionButton";
+import { SlotCapacityManager } from "@/components/SlotCapacityManager";
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
@@ -10,8 +13,12 @@ export default async function AdminReservationsPage({ searchParams }: Props) {
   const params = await searchParams;
   const date = Array.isArray(params.date) ? params.date[0] : params.date;
   const status = Array.isArray(params.status) ? params.status[0] : params.status;
+  const capacityDate = date || addDays(1);
   await connectDB();
-  const result = await getReservations({ date: date || undefined, status: status || undefined, limit: 48 });
+  const [result, slots] = await Promise.all([
+    getReservations({ date: date || undefined, status: status || undefined, limit: 48 }),
+    getSlotCapacities(capacityDate),
+  ]);
 
   return (
     <main className="space-y-4">
@@ -25,6 +32,8 @@ export default async function AdminReservationsPage({ searchParams }: Props) {
         </select>
         <button type="submit" className="rounded-full bg-stone-900 px-4 py-1.5 text-xs font-semibold text-white">Apply</button>
       </form>
+
+      <SlotCapacityManager date={capacityDate} slots={slots} />
 
       {result.items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-stone-300 bg-white p-12 text-center text-sm text-stone-500">

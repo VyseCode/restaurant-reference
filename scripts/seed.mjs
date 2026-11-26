@@ -75,6 +75,18 @@ reservationSchema.index(
   { unique: true, partialFilterExpression: { status: "confirmed" } },
 );
 
+const slotCapacitySchema = new mongoose.Schema(
+  {
+    _id: String,
+    date: String,
+    time: String,
+    capacity: Number,
+    booked: Number,
+  },
+  { timestamps: true, versionKey: false },
+);
+slotCapacitySchema.index({ date: 1 });
+
 const cartSchema = new mongoose.Schema(
   { user: { type: mongoose.Schema.Types.ObjectId, unique: true }, items: [{ item: mongoose.Schema.Types.ObjectId, qty: Number }] },
   { timestamps: true },
@@ -119,6 +131,7 @@ const Category = mongoose.model("Category", categorySchema);
 const MenuItem = mongoose.model("MenuItem", menuItemSchema);
 const Special = mongoose.model("Special", specialSchema);
 const Reservation = mongoose.model("Reservation", reservationSchema);
+const SlotCapacity = mongoose.model("SlotCapacity", slotCapacitySchema);
 const Cart = mongoose.model("Cart", cartSchema);
 const Order = mongoose.model("Order", orderSchema);
 const Review = mongoose.model("Review", reviewSchema);
@@ -163,6 +176,7 @@ async function main() {
     MenuItem.createIndexes(),
     Special.createIndexes(),
     Reservation.createIndexes(),
+    SlotCapacity.createIndexes(),
     Cart.createIndexes(),
     Order.createIndexes(),
     Review.createIndexes(),
@@ -175,6 +189,7 @@ async function main() {
     MenuItem.deleteMany({}),
     Special.deleteMany({}),
     Reservation.deleteMany({}),
+    SlotCapacity.deleteMany({}),
     Cart.deleteMany({}),
     Order.deleteMany({}),
     Review.deleteMany({}),
@@ -220,6 +235,19 @@ async function main() {
     { user: marcus._id, date: dayString(-3), time: "18:00", partySize: 2, status: "completed", notes: "Past visit" },
   ]);
 
+  const confirmed = await Reservation.find({ status: "confirmed" }).lean();
+  const counts = new Map();
+  for (const booking of confirmed) {
+    const key = `${booking.date}|${booking.time}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  await SlotCapacity.create(
+    [...counts].map(([key, booked]) => {
+      const [date, time] = key.split("|");
+      return { _id: key, date, time, capacity: 2, booked };
+    }),
+  );
+
   await Cart.create({
     user: alex._id,
     items: [
@@ -258,7 +286,7 @@ async function main() {
   }
 
   console.log(
-    `Seeded ${users.length} users, ${cats.length} categories, ${items.length} menu items, 2 specials, 6 reservations, 1 cart, ${orders.length} orders, 2 reviews, 3 favorites.`,
+    `Seeded ${users.length} users, ${cats.length} categories, ${items.length} menu items, 2 specials, 6 reservations, ${counts.size} slot capacities, 1 cart, ${orders.length} orders, 2 reviews, 3 favorites.`,
   );
   console.log("Demo: admin@restaurant.test / password123 (admin); alex@example.com / password123 (customer)");
   await mongoose.disconnect();
