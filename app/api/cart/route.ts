@@ -7,6 +7,17 @@ import { MenuItem } from "@/models/MenuItem";
 import { getCart } from "@/lib/queries";
 import { cartAddSchema, cartUpdateSchema } from "@/lib/schemas";
 
+export async function GET() {
+  try {
+    const guard = await requireUser();
+    if ("response" in guard) return guard.response;
+    await connectDB();
+    return ok({ cart: await getCart(guard.session.userId) });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const guard = await requireUser();

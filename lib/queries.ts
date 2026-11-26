@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { SLOT_CAPACITY, SLOTS } from "@/lib/constants";
 import { Category } from "@/models/Category";
 import { MenuItem } from "@/models/MenuItem";
 import { Special } from "@/models/Special";
@@ -7,6 +8,7 @@ import { Reservation } from "@/models/Reservation";
 import { Order } from "@/models/Order";
 import { Review } from "@/models/Review";
 import { Favorite } from "@/models/Favorite";
+import { User } from "@/models/User";
 import type {
   AdminStatsDTO,
   CartDTO,
@@ -49,6 +51,14 @@ function validId(value: string | null | undefined) {
 
 function pagination(total: number, page: number, limit: number): PaginationDTO {
   return { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) };
+}
+
+async function userNames(ids: Types.ObjectId[]) {
+  if (!ids.length) return new Map<string, string>();
+  const users = await User.find({ _id: { $in: ids } })
+    .select("name")
+    .lean();
+  return new Map(users.map((user) => [user._id.toString(), user.name]));
 }
 
 async function statsFor(ids: Types.ObjectId[]) {
@@ -268,7 +278,6 @@ export async function getReservations(options: {
 
   const [docs, total] = await Promise.all([
     Reservation.find(filter)
-      .populate("user", "name")
       .sort({ date: -1, time: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -282,8 +291,9 @@ export async function getReservations(options: {
     partySize: number;
     status: string;
     notes: string;
-    user: { name: string } | null;
+    user: Types.ObjectId;
   }>;
+  const names = await userNames(items.map((doc) => doc.user));
 
   return {
     items: items.map((doc) => ({
@@ -293,10 +303,28 @@ export async function getReservations(options: {
       partySize: doc.partySize,
       status: doc.status,
       notes: doc.notes ?? "",
-      userName: doc.user?.name,
+      userName: names.get(doc.user.toString()),
     })),
     pagination: pagination(total, page, limit),
   };
+}
+
+export async function getSlotAvailability(
+  date: string,
+): Promise<Record<string, number>> {
+  const rows = (await Reservation.aggregate([
+    { $match: { date, status: "confirmed" } },
+    { $group: { _id: "$time", count: { $sum: 1 } } },
+  ])) as Array<{ _id: string; count: number }>;
+  const used = new Map(rows.map((row) => [row._id, row.count]));
+  const result: Record<string, number> = {};
+  for (const slot of SLOTS) {
+    result[slot] = Math.max(
+      0,
+      SLOT_CAPACITY - (used.get(slot) ?? 0),
+    );
+  }
+  return result;
 }
 
 export async function getOrders(options: {
@@ -313,13 +341,17 @@ export async function getOrders(options: {
 
   const [docs, total] = await Promise.all([
     Order.find(filter)
-      .populate("user", "name")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean(),
     Order.countDocuments(filter),
   ]);
+  const ordersRaw = docs as unknown as Array<{
+    _id: Types.ObjectId;
+    user: Types.ObjectId;
+  }>;
+  const names = await userNames(ordersRaw.map((doc) => doc.user));
   const orderIds = docs.map((doc) => doc._id);
   const reviewed = await Review.find({ order: { $in: orderIds } })
     .select("order")
@@ -341,7 +373,7 @@ export async function getOrders(options: {
     tableNumber: string;
     notes: string;
     createdAt: Date;
-    user: { name: string } | null;
+    user: Types.ObjectId;
   }>;
 
   return {
@@ -361,7 +393,7 @@ export async function getOrders(options: {
       tableNumber: doc.tableNumber ?? "",
       notes: doc.notes ?? "",
       createdAt: doc.createdAt.toISOString(),
-      userName: doc.user?.name,
+      userName: names.get(doc.user.toString()),
       reviewed: reviewedIds.has(doc._id.toString()),
     })),
     pagination: pagination(total, page, limit),
@@ -380,7 +412,6 @@ export async function getReviews(options: {
 
   const [docs, total] = await Promise.all([
     Review.find(filter)
-      .populate("user", "name")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -391,18 +422,19 @@ export async function getReviews(options: {
     _id: Types.ObjectId;
     order: Types.ObjectId;
     item: Types.ObjectId | null;
-    user: { name: string } | null;
+    user: Types.ObjectId;
     rating: number;
     comment: string;
     createdAt: Date;
   }>;
+  const names = await userNames(reviews.map((doc) => doc.user));
 
   return {
     items: reviews.map((doc) => ({
       id: doc._id.toString(),
       orderId: doc.order.toString(),
       itemId: doc.item?.toString() ?? "",
-      userName: doc.user?.name ?? "Guest",
+      userName: names.get(doc.user.toString()) ?? "Guest",
       rating: doc.rating,
       comment: doc.comment ?? "",
       createdAt: doc.createdAt.toISOString(),
