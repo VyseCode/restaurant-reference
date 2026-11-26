@@ -79,6 +79,12 @@ export const reservationUpdateSchema = z.object({
   notes: z.string().trim().max(300).optional(),
 });
 
+export const slotCapacitySchema = z.object({
+  date: dateStringSchema,
+  time: z.enum(SLOTS, { message: "Choose one of the available time slots" }),
+  capacity: z.number().int().min(0, "Capacity cannot be negative").max(1000),
+});
+
 export const cartAddSchema = z.object({
   itemId: objectIdSchema,
   qty: z.number().int().min(1).max(50).default(1),

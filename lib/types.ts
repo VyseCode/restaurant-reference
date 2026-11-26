@@ -67,6 +67,13 @@ export type ReservationDTO = {
   userName?: string;
 };
 
+export type SlotCapacityDTO = {
+  time: string;
+  capacity: number;
+  booked: number;
+  remaining: number;
+};
+
 export type OrderLineDTO = {
   itemId: string;
   name: string;

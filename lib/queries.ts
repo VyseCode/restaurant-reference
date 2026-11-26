@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { SLOT_CAPACITY, SLOTS } from "@/lib/constants";
+import { getSlotCapacities } from "@/lib/slot-capacity";
 import { Category } from "@/models/Category";
 import { MenuItem } from "@/models/MenuItem";
 import { Special } from "@/models/Special";
@@ -339,19 +339,8 @@ export async function getReservations(options: {
 export async function getSlotAvailability(
   date: string,
 ): Promise<Record<string, number>> {
-  const rows = (await Reservation.aggregate([
-    { $match: { date, status: "confirmed" } },
-    { $group: { _id: "$time", count: { $sum: 1 } } },
-  ])) as Array<{ _id: string; count: number }>;
-  const used = new Map(rows.map((row) => [row._id, row.count]));
-  const result: Record<string, number> = {};
-  for (const slot of SLOTS) {
-    result[slot] = Math.max(
-      0,
-      SLOT_CAPACITY - (used.get(slot) ?? 0),
-    );
-  }
-  return result;
+  const slots = await getSlotCapacities(date);
+  return Object.fromEntries(slots.map((slot) => [slot.time, slot.remaining]));
 }
 
 export async function getOrders(options: {
