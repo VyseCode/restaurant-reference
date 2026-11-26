@@ -217,6 +217,7 @@ async function main() {
     { user: marcus._id, date: dayString(3), time: "18:00", partySize: 4, status: "confirmed", notes: "Birthday dinner" },
     { user: sofia._id, date: dayString(2), time: "12:00", partySize: 3, status: "cancelled", notes: "Plans changed" },
     { user: alex._id, date: dayString(5), time: "20:00", partySize: 2, status: "completed", notes: "" },
+    { user: marcus._id, date: dayString(-3), time: "18:00", partySize: 2, status: "completed", notes: "Past visit" },
   ]);
 
   await Cart.create({
@@ -257,7 +258,7 @@ async function main() {
   }
 
   console.log(
-    `Seeded ${users.length} users, ${cats.length} categories, ${items.length} menu items, 2 specials, 5 reservations, 1 cart, ${orders.length} orders, 2 reviews, 3 favorites.`,
+    `Seeded ${users.length} users, ${cats.length} categories, ${items.length} menu items, 2 specials, 6 reservations, 1 cart, ${orders.length} orders, 2 reviews, 3 favorites.`,
   );
   console.log("Demo: admin@restaurant.test / password123 (admin); alex@example.com / password123 (customer)");
   await mongoose.disconnect();

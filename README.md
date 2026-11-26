@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Saffron & Spice — Restaurant Website Reference
 
-## Getting Started
+A single-restaurant website: browse a menu, reserve a table, order online, review completed orders, and manage the restaurant from an admin dashboard.
 
-First, run the development server:
+Reference implementation inspired by restaurant ordering platforms (Zomato/Swiggy-style flows), with architecture modeled on the `inFlow` (LinkedIn) reference app: Next.js 16 App Router, React 19, Tailwind 4, TypeScript, MongoDB/Mongoose, bcryptjs, `jose` JWT cookies, and zod.
+
+## Features
+
+- Email/password auth with bcrypt hashing, signed JWTs in HTTP-only cookies, and `customer` / `admin` roles
+- Menu categories and items with price, image, dietary tags, availability and popularity counters
+- Daily specials with a unique per-date/per-item rule
+- Table reservations with time slots, capacity limit, no double-booking, past-slot guards, cancellations and admin management
+- Cart with quantity controls, unavailable-item guard, and checkout into `dine-in`, `takeaway` or `delivery` orders
+- Order workflow `placed → preparing → ready → completed`, payment status, cancellation, and admin-only transitions
+- Reviews allowed only for completed orders, one per order; favorites for customers
+- Admin dashboard: revenue, order statuses, booking counts and popular items
+- Responsive menu grid, filters, search, sorting, pagination, cart, reservation form, and loading/empty/error states
+
+## Local setup
+
+1. `npm install`
+2. Start MongoDB on `127.0.0.1:27017` (or set `MONGODB_URI`)
+3. Copy `.env.example` to `.env.local` and set a real `JWT_SECRET`
+4. `npm run seed` (wipes only the `restaurant_ref` database and recreates it)
+5. `npm run dev` and open http://localhost:3000 (production port: 3207)
+
+## Demo accounts
+
+All accounts use password `password123`.
+
+| Account | Role | What to try |
+| --- | --- | --- |
+| `alex@example.com` | customer | Seeded cart, completed order (reviewable), favorites, booking at tomorrow 18:00 |
+| `priya@example.com` | customer | Placed order (not yet reviewable), booking in the full 19:00 slot |
+| `marcus@example.com` | customer | Preparing order, past completed booking |
+| `sofia@example.com` | customer | Ready order and a cancelled booking |
+| `admin@restaurant.test` | admin | `/admin` dashboard and all management pages |
+
+Seed data covers every order status, reservation status, unavailable items, specials for today and tomorrow, two favorites per active customer where applicable, and reviews for completed orders.
+
+## Checks
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run lint        # eslint, 0 errors/warnings
+npm run typecheck   # tsc --noEmit
+npm run build
+npm run seed        # re-runnable; run twice safely
+npm run start -- -p 3207
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## API
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Method | Endpoint | Description | Access |
+| --- | --- | --- | --- |
+| POST | `/api/auth/register` | Create account (201; 409 on duplicate) | public |
+| POST | `/api/auth/login` | Sign in | public |
+| POST | `/api/auth/logout` | Clear session cookie | signed in |
+| GET | `/api/auth/me` | Current user (401 when anonymous) | signed in |
+| GET / POST | `/api/categories` | List / create category | create: admin |
+| PATCH / DELETE | `/api/categories/[id]` | Update / delete category | admin |
+| GET / POST | `/api/menu` | Search/filter/sort/paginate / create item | create: admin |
+| GET / PATCH / DELETE | `/api/menu/[id]` | Item detail / update / delete | mutations: admin |
+| GET / POST | `/api/specials` | Daily specials / create | create: admin |
+| PATCH / DELETE | `/api/specials/[id]` | Update / delete special | admin |
+| GET / POST | `/api/reservations` | My bookings / book a slot | signed in |
+| GET / PATCH / DELETE | `/api/reservations/[id]` | Detail / status change (customer cancel only) / delete | owner or admin |
+| GET / POST / PATCH / DELETE | `/api/cart` | View / add / change qty / clear | signed in |
+| DELETE | `/api/cart/[itemId]` | Remove a line | signed in |
+| GET / POST | `/api/orders` | My orders / checkout cart | signed in |
+| GET / PATCH | `/api/orders/[id]` | Order detail / status + payment | owner / admin (PATCH admin only) |
+| GET / POST | `/api/reviews` | Reviews / review a completed order | POST signed in |
+| DELETE | `/api/reviews/[id]` | Remove own review | owner or admin |
+| GET / POST | `/api/favorites` | Favorite items / toggle | signed in |
+| GET | `/api/admin/stats` | Orders, revenue, bookings, popular items | admin |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Pages
 
-## Learn More
+`/`, `/login`, `/register`, guarded `(app)` pages: `/menu`, `/menu/[id]`, `/cart`, `/reservations`, `/orders`, `/orders/[id]`, `/account`, and admin-only `/admin`, `/admin/orders`, `/admin/reservations`, `/admin/menu`, `/admin/specials`.
 
-To learn more about Next.js, take a look at the following resources:
+## Scalability & security notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Cached Mongoose connection with bounded pool; `.lean()` projections on list queries
+- Cursor-free but capped page/limit pagination (`limit ≤ 48`) with indexes on sort/filter keys
+- Unique compound indexes enforce one confirmed booking per user/date/slot, one favorite per user/item, one special per date/item, one review per order
+- Denormalized popularity counters use atomic `$inc`; schema `min` guards against negative values
+- Every mutation is zod-validated and authz-checked server-side; passwords use `select: false` and are never serialized
+- Customer/admin separation is enforced in route handlers and the admin layout, not just in the UI
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Known limitations
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Slot-capacity checks are count-then-create rather than a MongoDB transaction; on a replica set this could be made fully race-safe with a transaction or a capacity document using `$inc` with a condition.
+- No real payment gateway: `paymentStatus` is set by staff from the admin panel.
+- Images are CSS placeholders; the seeded menu uses empty `imageUrl` values (the field is supported in the API).
+- No email verification, password reset, rate limiting, or CSRF tokens (same-site lax cookies are used).
+- Server local time defines "today" for reservation validation; restaurant timezone configuration is not implemented.
