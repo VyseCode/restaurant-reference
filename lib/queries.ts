@@ -202,6 +202,33 @@ export async function getMenuItem(
   return toMenuItem(doc, ratings, favorites);
 }
 
+export async function getAllSpecials(): Promise<SpecialDTO[]> {
+  const docs = (await Special.find()
+    .populate("item", "name price")
+    .sort({ date: 1 })
+    .limit(100)
+    .lean()) as unknown as Array<{
+    _id: Types.ObjectId;
+    date: string;
+    item: { _id: Types.ObjectId; name: string; price: number } | null;
+    specialPrice: number;
+    note: string;
+    available: boolean;
+  }>;
+  return docs
+    .filter((doc) => doc.item)
+    .map((doc) => ({
+      id: doc._id.toString(),
+      date: doc.date,
+      itemId: doc.item!._id.toString(),
+      itemName: doc.item!.name,
+      price: doc.specialPrice,
+      regularPrice: doc.item!.price,
+      note: doc.note ?? "",
+      available: doc.available,
+    }));
+}
+
 export async function getSpecials(date?: string): Promise<SpecialDTO[]> {
   const filter: Record<string, unknown> = { available: true };
   if (date) filter.date = date;
